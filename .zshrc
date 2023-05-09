@@ -18,12 +18,16 @@ antigen bundle docker-compose
 
 # load extra plugins on github
 antigen bundle sukkaw/zsh-proxy
-antigen bundle marlonrichert/zsh-autocomplete
+antigen bundle zsh-users/zsh-completions
+antigen bundle zsh-users/zsh-history-substring-search
 antigen bundle zsh-users/zsh-autosuggestions
+
+# syntax-highlighting must be the last plugin sourced.
+# https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/INSTALL.md#with-a-plugin-manager
 antigen bundle zsh-users/zsh-syntax-highlighting
 
 # set zsh theme
-antigen theme robbyrussell
+antigen theme af-magic
 
 # apply antigen
 antigen apply
