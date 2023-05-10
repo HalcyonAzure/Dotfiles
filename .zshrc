@@ -41,7 +41,7 @@ zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=
 zstyle ':completion:*:*:man:*:*' menu select=long search
 
 # set locale
-export LC_ALL=C.utf8
+export LC_ALL=C.UTF-8
 export LANG=en_US.UTF-8
 
 # add transfer.sh
