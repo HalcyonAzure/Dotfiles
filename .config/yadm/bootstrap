@@ -105,9 +105,6 @@ configure_proxy
 # 配置git全局用户名和邮箱
 config_git
 
-# 安装croc用于分享文件
-curl https://getcroc.schollz.com | bash
-
 # 解密加密文件
 decrypt_files
 
