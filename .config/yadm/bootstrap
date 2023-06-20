@@ -119,7 +119,7 @@ else
     # 输出绿色信息表示成功更改默认shell
     log "Default shell changed to zsh."
     # 重新启动shell以使更改生效
-    exec zsh
+    exec -l $SHELL
   else
     # 输出红色信息表示更改默认shell失败
     error "Failed to change default shell. Please try again later."
