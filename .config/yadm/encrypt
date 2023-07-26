@@ -1,2 +1,3 @@
 .git-credentials
 .ssh/id*
+.ssh/config
