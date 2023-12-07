@@ -22,6 +22,7 @@ replace_mirror() {
     [yY])
       log "Replacing the default mirror with USTC mirror..."
       sudo sed -i 's/http:\/\/archive.ubuntu.com/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+      sudo sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
       sudo apt update
       log "Mirror replacement completed."
       ;;
