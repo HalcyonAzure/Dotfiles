@@ -27,7 +27,7 @@ antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle zsh-users/zsh-syntax-highlighting
 
 # set zsh theme
-antigen theme random
+antigen theme dstufft
 
 # apply antigen
 antigen apply
@@ -44,6 +44,9 @@ zstyle ':completion:*:*:man:*:*' menu select=long search
 export LC_ALL=C.UTF-8
 export LANG=en_US.UTF-8
 
+# configure pygmentize colorize style
+ZSH_COLORIZE_STYLE="native"
+
 # rustup mirror
 export RUSTUP_DIST_SERVER="https://rsproxy.cn"
 export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
@@ -53,6 +56,9 @@ COMPLETION_WAITING_DOTS="true"
 
 # alias config
 alias j=z
+alias cat=ccat
+alias less=cless
+alias ls="exa -alh --icons"
 
 # enable wildmatch
 setopt nonomatch
