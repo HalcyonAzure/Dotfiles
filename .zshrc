@@ -58,7 +58,7 @@ COMPLETION_WAITING_DOTS="true"
 alias j=z
 alias cat=ccat
 alias less=cless
-alias ls="exa -alh --icons"
+alias ls="exa -lh --icons"
 
 # enable wildmatch
 setopt nonomatch
