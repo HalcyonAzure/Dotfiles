@@ -27,7 +27,7 @@ antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle zsh-users/zsh-syntax-highlighting
 
 # set zsh theme
-antigen theme dstufft
+antigen theme wuffers
 
 # apply antigen
 antigen apply
