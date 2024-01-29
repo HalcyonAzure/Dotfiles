@@ -76,8 +76,8 @@ transfer() {
             return 1
         fi
         if [ -d "$file" ]; then
-            file_name="$file_name.zip"
-            (cd "$file" && zip -r -q - .) | curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
+            file_name="$file_name.tar.gz"
+            tar -czf - "$file" | curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
             echo
         else
             cat "$file" | curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
@@ -88,4 +88,5 @@ transfer() {
         curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
         echo
     fi
+    echo
 }
