@@ -17,7 +17,6 @@ antigen bundle command-not-found
 antigen bundle docker-compose
 
 # load extra plugins on github
-antigen bundle sukkaw/zsh-proxy
 antigen bundle zsh-users/zsh-completions
 antigen bundle zsh-users/zsh-history-substring-search
 antigen bundle zsh-users/zsh-autosuggestions
@@ -27,7 +26,7 @@ antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle zsh-users/zsh-syntax-highlighting
 
 # set zsh theme
-antigen theme dstufft
+antigen theme eastwood
 
 # apply antigen
 antigen apply
@@ -58,10 +57,36 @@ COMPLETION_WAITING_DOTS="true"
 alias j=z
 alias cat=ccat
 alias less=cless
-alias ls="exa -alh --icons"
+alias ls="exa -lh --icons"
 
 # enable wildmatch
 setopt nonomatch
 
 # transfer function
-transfer(){ if [ $# -eq 0 ];then echo "No arguments specified.\nUsage:\n transfer <file|directory>\n ... | transfer <file_name>" >&2;return 1;fi;if tty -s;then file="$1";file_name=$(basename "$file");if [ ! -e "$file" ];then echo "$file: No such file or directory" >&2;return 1;fi;if [ -d "$file" ];then file_name="$file_name.zip";(cd "$file"&&zip -r -q - .)|curl --progress-bar --upload-file "-" "https://packets.zip/$file_name"|tee /dev/null;echo;else cat "$file"|curl --progress-bar --upload-file "-" "https://packets.zip/$file_name"|tee /dev/null;echo;fi;else file_name=$1;curl --progress-bar --upload-file "-" "https://packets.zip/$file_name"|tee /dev/null;echo;fi;}
+transfer() {
+    if [ $# -eq 0 ]; then
+        echo "No arguments specified.\nUsage:\n transfer <file|directory>\n ... | transfer <file_name>" >&2
+        return 1
+    fi
+    if tty -s; then
+        file="$1"
+        file_name=$(basename "$file")
+        if [ ! -e "$file" ]; then
+            echo "$file: No such file or directory" >&2
+            return 1
+        fi
+        if [ -d "$file" ]; then
+            file_name="$file_name.tar.gz"
+            tar -czf - "$file" | curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
+            echo
+        else
+            cat "$file" | curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
+            echo
+        fi
+    else
+        file_name=$1
+        curl --progress-bar --upload-file "-" "https://packets.zip/$file_name" | tee /dev/null
+        echo
+    fi
+    echo
+}

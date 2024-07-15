@@ -10,71 +10,63 @@ error() {
 }
 
 # 检查当前用户是否有sudo权限
-if ! sudo -v &> /dev/null; then
+if ! sudo -v &>/dev/null; then
   error "Please run the script as a user with sudo privileges"
   exit 1
 fi
 
-# 定义函数用于询问是否需要替换镜像源，如果需要则替换
-replace_mirror() {
+# apt 管理器的镜像源替换
+replace_mirror_apt() {
   read -rp "Use USTC mirror as default for APT? [y/N]: " answer
   case $answer in
-    [yY])
-      log "Replacing the default mirror with USTC mirror..."
-      sudo sed -i 's/http:\/\/archive.ubuntu.com/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-      sudo sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-      sudo apt update
-      log "Mirror replacement completed."
-      ;;
-    *)
-      log "Keeping the default mirror."
-      ;;
+  [yY])
+    log "Replacing the default mirror with USTC mirror..."
+    sudo sed -i 's/http:\/\/archive.ubuntu.com/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+    sudo sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+    sudo apt update
+    log "Mirror replacement completed."
+    ;;
+  *)
+    log "Keeping the default mirror."
+    ;;
   esac
 }
 
 # 定义函数用于安装apt软件
-install_packages() {
+install_packages_apt() {
   log "Installing common components..."
   sudo apt install -y zsh tldr vim tmux curl wget openssl exa \
-        build-essential gdb python3 python3-pip zsh-antigen # 这里可以添加其他需要安装的软件包
+    build-essential python3-pygments gdb python3 python3-pip zsh-antigen # 这里可以添加其他需要安装的软件包
   log "Package installation completed."
 }
 
-# 定义函数用于配置代理环境变量
-configure_proxy() {
-  read -rp "Do you want to configure proxy environment variables? [y/N]: " answer
-  case $answer in
-    [yY])
-      read -rp "Enter your proxy server URL: " proxy_url
-      read -rp "Enter your proxy server port: " proxy_port
-      # 设置ALL_PROXY环境变量，使得所有支持代理的应用程序都使用该代理服务器
-      export ALL_PROXY="http://$proxy_url:$proxy_port"
-      # 设置其他常见代理环境变量
-      export http_proxy="$ALL_PROXY"
-      export https_proxy="$ALL_PROXY"
-      export ftp_proxy="$ALL_PROXY"
-      log "Proxy environment variables configured."
-      ;;
-    *)
-      log "Skipping proxy configuration."
-      ;;
-  esac
+# 定义函数用于在macos下使用homebrew进行软件安装
+install_packages_homebrew() {
+  log "Installing common components..."
+  brew install zsh tldr vim tmux curl wget openssl exa \
+    pygments antigen # 这里可以添加其他需要安装的软件包
+  log "Package installation completed."
 }
 
 # 定义函数用于配置git全局用户名和邮箱
 config_git() {
+  # 检查是否已经存在现有的gitconfig配置，如果有的话则输出warning信息
+  if [ -f ~/.gitconfig ]; then
+    log "Warning: Existing gitconfig file found. Skipping git global configuration."
+    return
+  fi 
   read -rp "Do you want to configure git global username and email? [y/N]: " answer
   case $answer in
-    [yY])
-      read -rp "Enter your git username: " username
-      read -rp "Enter your git email: " email
-      git config --global user.name "$username"
-      git config --global user.email "$email"
-      log "Git global configuration completed."
-      ;;
-    *)
-      log "Skipping git global configuration."
-      ;;
+  [yY])
+    read -rp "Enter your git username: " username
+    read -rp "Enter your git email: " email
+    git config --global user.name "$username"
+    git config --global user.email "$email"
+    log "Git global configuration completed."
+    ;;
+  *)
+    log "Skipping git global configuration."
+    ;;
   esac
 }
 
@@ -82,26 +74,46 @@ config_git() {
 decrypt_files() {
   read -rp "Do you want to decrypt encrypted files using yadm? [y/N]: " answer
   case $answer in
-    [yY])
-      yadm decrypt # 这里可以添加其他需要解密的文件路径
-      log "File decryption completed."
-      ;;
-    *)
-      log "Skipping file decryption."
-      ;;
+  [yY])
+    yadm decrypt # 这里可以添加其他需要解密的文件路径
+    log "File decryption completed."
+    ;;
+  *)
+    log "Skipping file decryption."
+    ;;
   esac
 }
 
 # 主程序开始
 
-# 询问是否要替换镜像源
-replace_mirror
+# 检查包管理器是否为apt
+# if [ -f /etc/apt/sources.list ]; then
+#   # 询问是否要替换镜像源
+#   replace_mirror_apt
+#   # 安装apt软件
+#   install_packages_apt
+# else
+#   # 如果不是apt，则输出错误信息
+#   error "Unsupported package manager, please install manually."
+# fi
 
-# 安装软件
-install_packages
-
-# 配置临时代理环境变量
-configure_proxy
+# 检查当前操作系统类型以及对应的包管理器，使用正确的包管理器进行软件安装
+if [ "$(uname)" = "Darwin" ]; then
+  # 检查是否已经安装homebrew
+  if ! command -v brew &>/dev/null; then
+    error "Homebrew is not installed. Please install it first."
+    exit 1
+  fi
+  install_packages_homebrew
+elif [ -f /etc/apt/sources.list ]; then
+  # 询问是否要替换镜像源
+  replace_mirror_apt
+  # 安装apt软件
+  install_packages_apt
+else
+  # 如果不是apt，则输出错误信息
+  error "Unsupported package manager, please install manually."
+fi
 
 # 配置git全局用户名和邮箱
 config_git
@@ -116,7 +128,7 @@ if [ "$SHELL" = "/bin/zsh" ]; then
   log "Zsh is already the default shell."
 else
   log "Changing the shell to zsh."
-  if chsh -s $(which zsh); then
+  if chsh -s "$(which zsh)"; then
     # 输出绿色信息表示成功更改默认shell
     log "Default shell changed to zsh."
     # 重新启动shell以使更改生效
