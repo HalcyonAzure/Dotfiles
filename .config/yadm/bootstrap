@@ -85,6 +85,7 @@ decrypt_files() {
 }
 
 
+
 # 检查当前操作系统类型以及对应的包管理器，使用正确的包管理器进行软件安装
 if [ "$(uname)" = "Darwin" ]; then
   # 检查是否已经安装homebrew
