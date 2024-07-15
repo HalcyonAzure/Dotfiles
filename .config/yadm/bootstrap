@@ -32,7 +32,7 @@ replace_mirror_apt() {
   esac
 }
 
-# 定义函数用于安装apt软件
+# 定义函数用于安装apt软件「方案选单」
 install_packages_apt() {
   log "Installing common components..."
   sudo apt install -y zsh tldr vim tmux curl wget openssl exa \
@@ -54,7 +54,7 @@ config_git() {
   if [ -f ~/.gitconfig ]; then
     log "Warning: Existing gitconfig file found. Skipping git global configuration."
     return
-  fi 
+  fi
   read -rp "Do you want to configure git global username and email? [y/N]: " answer
   case $answer in
   [yY])
@@ -84,18 +84,6 @@ decrypt_files() {
   esac
 }
 
-# 主程序开始
-
-# 检查包管理器是否为apt
-# if [ -f /etc/apt/sources.list ]; then
-#   # 询问是否要替换镜像源
-#   replace_mirror_apt
-#   # 安装apt软件
-#   install_packages_apt
-# else
-#   # 如果不是apt，则输出错误信息
-#   error "Unsupported package manager, please install manually."
-# fi
 
 # 检查当前操作系统类型以及对应的包管理器，使用正确的包管理器进行软件安装
 if [ "$(uname)" = "Darwin" ]; then
