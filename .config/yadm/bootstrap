@@ -18,34 +18,49 @@ fi
 # 新增：安装Homebrew的函数
 install_homebrew() {
   if ! command -v brew &>/dev/null; then
-    log "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    log "Installing Homebrew via USTC mirror..."
     
+    # 设置中科大镜像环境变量
+    export HOMEBREW_BREW_GIT_REMOTE="https://mirrors.ustc.edu.cn/brew.git"
+    export HOMEBREW_CORE_GIT_REMOTE="https://mirrors.ustc.edu.cn/homebrew-core.git"
+    export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.ustc.edu.cn/homebrew-bottles"
+    export HOMEBREW_API_DOMAIN="https://mirrors.ustc.edu.cn/homebrew-bottles/api"
+
+    # 使用中科大每日同步的安装脚本
+    /bin/bash -c "$(curl -fsSL https://mirrors.ustc.edu.cn/misc/brew-install.sh)"
+
     # 将brew添加到PATH
     if [ "$(uname)" = "Darwin" ]; then
       echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
     else
       echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.profile
     fi
+    source ~/.profile
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    
+    # 初始化brew更新（使用中科大源）
+    brew update
   fi
 }
 
-# 新增：替换Homebrew镜像源
+# 修改：替换镜像源函数（改为可选配置）
 replace_mirror_brew() {
-  read -rp "Use USTC mirror as default for Homebrew? [y/N]: " answer
+  read -rp "Verify USTC mirror configuration? [y/N]: " answer
   case $answer in
   [yY])
-    log "Replacing Homebrew mirror..."
-    # 替换核心仓库
-    git -C "$(brew --repo)" remote set-url origin https://mirrors.ustc.edu.cn/brew.git
-    # 替换homebrew-core
-    git -C "$(brew --repo homebrew/core)" remote set-url origin https://mirrors.ustc.edu.cn/homebrew-core.git
-    # 更新
+    log "Checking mirror configuration..."
+    # 检查核心仓库配置
+    if ! git -C "$(brew --repo)" remote -v | grep -q ustc.edu.cn; then
+      git -C "$(brew --repo)" remote set-url origin https://mirrors.ustc.edu.cn/brew.git
+    fi
+    # 检查homebrew-core配置
+    if ! git -C "$(brew --repo homebrew/core)" remote -v | grep -q ustc.edu.cn; then
+      git -C "$(brew --repo homebrew/core)" remote set-url origin https://mirrors.ustc.edu.cn/homebrew-core.git
+    fi
     brew update
     ;;
   *)
-    log "Keeping default Homebrew mirror"
+    log "Skipping mirror verification"
     ;;
   esac
 }
@@ -59,8 +74,13 @@ install_packages_brew() {
   
   # Linux系统需要额外处理
   if [ "$(uname)" = "Linux" ]; then
-    # 安装Linuxbrew依赖
-    sudo apt-get install -y build-essential
+    # 安装编译依赖
+    if command -v apt-get &>/dev/null; then
+      sudo apt-get install -y build-essential
+    elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+      sudo $(command -v dnf || command -v yum) install -y gcc-c++ glibc-static libstdc++-static
+    fi
+
     # 处理可能需要的特殊包
     brew install gcc
   fi
@@ -109,9 +129,28 @@ decrypt_files() {
 
 # 主逻辑调整
 if [ "$(uname)" = "Linux" ]; then
-  # 确保安装依赖
-  sudo apt-get update
-  sudo apt-get install -y build-essential procps curl file git
+  # 检测包管理器
+  if command -v apt-get &>/dev/null; then
+    log "Detected APT package manager"
+    sudo apt-get update
+    sudo apt-get install -y build-essential procps curl file git
+  elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+    log "Detected YUM/DNF package manager"
+    sudo $(command -v dnf || command -v yum) install -y gcc-c++ make procps-ng curl file git
+  else
+    error "Unsupported package manager. Please install dependencies manually."
+    exit 1
+  fi
+elif [ "$(uname)" = "Darwin" ]; then
+  # 检查Xcode CLT
+  if ! xcode-select -p &>/dev/null; then
+    log "Installing Xcode Command Line Tools..."
+    xcode-select --install
+    # 等待安装完成
+    until xcode-select -p &>/dev/null; do
+      sleep 5
+    done
+  fi
 fi
 
 # 统一安装Homebrew
