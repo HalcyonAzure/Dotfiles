@@ -65,13 +65,17 @@ replace_mirror_brew() {
   esac
 }
 
-# 统一安装函数
+# 修改Python相关安装方式
 install_packages_brew() {
   log "Installing common components..."
   
   # 基础工具
   brew install zsh tldr vim tmux curl wget openssl eza pygments antigen
   
+  # 使用brew直接安装pipx
+  brew install pipx
+  pipx ensurepath  # 确保pipx路径生效
+
   # Linux系统需要额外处理
   if [ "$(uname)" = "Linux" ]; then
     # 安装编译依赖
@@ -84,9 +88,6 @@ install_packages_brew() {
     # 处理可能需要的特殊包
     brew install gcc
   fi
-  
-  # Python相关
-  python3 -m pip install --user pipx
   
   log "Package installation completed."
 }
