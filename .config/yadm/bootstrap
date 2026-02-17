@@ -32,6 +32,22 @@ replace_mirror_apt() {
   esac
 }
 
+# Debian/Ubuntu 添加 eza 官方仓库 (eza-community)
+add_eza_repo_apt() {
+  if [ -f /etc/apt/sources.list.d/gierens.list ]; then
+    log "eza repository already added, skipping."
+    return
+  fi
+  log "Adding eza official repository..."
+  sudo apt install -y gpg
+  sudo mkdir -p /etc/apt/keyrings
+  wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
+  sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
+  sudo apt update
+  log "eza repository added."
+}
+
 # 定义函数用于安装apt软件「方案选单」
 install_packages_apt() {
   log "Installing common components..."
@@ -43,7 +59,7 @@ install_packages_apt() {
 # 定义函数用于在macos下使用homebrew进行软件安装
 install_packages_homebrew() {
   log "Installing common components..."
-  brew install zsh tldr vim tmux curl wget openssl exa \
+  brew install zsh tldr vim tmux curl wget openssl eza \
     pygments antigen # 这里可以添加其他需要安装的软件包
   log "Package installation completed."
 }
@@ -97,6 +113,8 @@ if [ "$(uname)" = "Darwin" ]; then
 elif [ -f /etc/apt/sources.list ]; then
   # 询问是否要替换镜像源
   replace_mirror_apt
+  # 添加 eza 官方仓库后再安装
+  add_eza_repo_apt
   # 安装apt软件
   install_packages_apt
 else
