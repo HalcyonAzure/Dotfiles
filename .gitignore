@@ -1,0 +1,3 @@
+# Machine-local settings and secrets. Never commit.
+.zshrc.local
+.zshrc.secrets
