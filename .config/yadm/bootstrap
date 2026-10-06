@@ -1,97 +1,138 @@
 #!/bin/bash
+set -euo pipefail
 
 log() {
   echo -e "\033[32m[INFO]\033[0m $1"
 }
 
-# 定义红色错误日志输出函数
 error() {
-  echo -e "\033[31m[ERROR]\033[0m $1"
+  echo -e "\033[31m[ERROR]\033[0m $1" >&2
 }
 
-# 检查当前用户是否有sudo权限
-if ! sudo -v &>/dev/null; then
-  error "Please run the script as a user with sudo privileges"
+if ! sudo -v; then
+  error "This script needs sudo. Run it in a terminal so the password prompt is visible."
   exit 1
 fi
 
-# apt 管理器的镜像源替换
+# Ubuntu 24.04+ 与 Debian 12+ 使用 deb822（*.sources）。
+# 只改遗留的 sources.list 在这些系统上不会生效。
 replace_mirror_apt() {
-  read -rp "Use USTC mirror as default for APT? [y/N]: " answer
-  case $answer in
-  [yY])
-    log "Replacing the default mirror with USTC mirror..."
-    sudo sed -i 's/http:\/\/archive.ubuntu.com/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    sudo sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    sudo apt update
-    log "Mirror replacement completed."
-    ;;
-  *)
-    log "Keeping the default mirror."
-    ;;
-  esac
-}
-
-# Debian/Ubuntu 添加 eza 官方仓库 (eza-community)
-add_eza_repo_apt() {
-  if [ -f /etc/apt/sources.list.d/gierens.list ]; then
-    log "eza repository already added, skipping."
+  local answer=""
+  if [ ! -t 0 ]; then
+    log "Non-interactive session; keeping the current APT mirror."
     return
   fi
-  log "Adding eza official repository..."
-  sudo apt install -y gpg
+
+  read -rp "Use USTC mirror for APT? [y/N]: " answer || true
+  case $answer in
+  [yY]) ;;
+  *)
+    log "Keeping the current APT mirror."
+    return
+    ;;
+  esac
+
+  local changed=0
+  local f
+  for f in /etc/apt/sources.list.d/ubuntu.sources \
+    /etc/apt/sources.list.d/debian.sources \
+    /etc/apt/sources.list; do
+    [ -f "$f" ] || continue
+    if grep -qE 'https?://[^[:space:]]+/ubuntu' "$f"; then
+      sudo sed -i -E 's#https?://[^[:space:]]+/ubuntu#https://mirrors.ustc.edu.cn/ubuntu#g' "$f"
+      changed=1
+      log "Updated Ubuntu mirror in $f"
+    fi
+    if grep -qE 'https?://[^[:space:]]+/debian' "$f"; then
+      sudo sed -i -E \
+        -e 's#https?://[^[:space:]]+/debian-security#https://mirrors.ustc.edu.cn/debian-security#g' \
+        -e 's#https?://[^[:space:]]+/debian#https://mirrors.ustc.edu.cn/debian#g' \
+        "$f"
+      changed=1
+      log "Updated Debian mirror in $f"
+    fi
+  done
+
+  if [ "$changed" -eq 0 ]; then
+    log "No APT archive URI matched; mirror files were left unchanged."
+  fi
+}
+
+# Ubuntu 24.04+ / Debian 13+ 的官方仓库已有 eza。
+# 只有缓存里没有候选包时才添加 deb.gierens.de（例如 Ubuntu 22.04、Debian 12）。
+ensure_eza_repo_apt() {
+  if apt-cache show eza 2>/dev/null | grep -q '^Package: eza$'; then
+    log "eza is available from the configured repositories."
+    return
+  fi
+
+  log "eza is not in the distro repositories; adding deb.gierens.de..."
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg
   sudo mkdir -p /etc/apt/keyrings
-  wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
-  echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
-  sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
-  sudo apt update
+
+  local tmp keyring
+  tmp=$(mktemp)
+  keyring=/etc/apt/keyrings/gierens.gpg
+  curl -fsSL https://raw.githubusercontent.com/eza-community/eza/main/deb.asc -o "$tmp"
+  # --batch --yes 避免目标文件已存在时 gpg 去读 /dev/tty。
+  sudo gpg --batch --yes --dearmor -o "$keyring" "$tmp"
+  rm -f "$tmp"
+
+  echo "deb [signed-by=${keyring}] http://deb.gierens.de stable main" |
+    sudo tee /etc/apt/sources.list.d/gierens.list >/dev/null
+  sudo chmod 644 "$keyring" /etc/apt/sources.list.d/gierens.list
+  sudo DEBIAN_FRONTEND=noninteractive apt-get update
   log "eza repository added."
 }
 
-# 定义函数用于安装apt软件「方案选单」
 install_packages_apt() {
+  # tealdeer 提供 /usr/bin/tldr。旧包 tldr 在 Ubuntu 25.10 起已删除，和别的包写在同一条 install 里会导致整单失败。
+  # 不安装 python3-pip：PEP 668 下不能往系统 Python 里 pip install。python3-venv 用来建虚拟环境。
+  # python3-pygments 提供 pygmentize，给 oh-my-zsh colorize 使用。
+  local packages=(
+    zsh
+    tealdeer
+    vim
+    tmux
+    curl
+    wget
+    openssl
+    eza
+    build-essential
+    python3
+    python3-venv
+    python3-pygments
+    gdb
+    zsh-antigen
+    direnv
+    zip
+  )
   log "Installing common components..."
-  sudo apt install -y zsh tldr vim tmux curl wget openssl eza \
-    build-essential python3-pygments gdb python3 python3-pip zsh-antigen # 这里可以添加其他需要安装的软件包
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
   log "Package installation completed."
 }
 
-# 定义函数用于在macos下使用homebrew进行软件安装
 install_packages_homebrew() {
+  # Homebrew 上的 openssl 是 keg-only，不会替换系统里 yadm 调用的 openssl。
   log "Installing common components..."
-  brew install zsh tldr vim tmux curl wget openssl eza \
-    pygments antigen # 这里可以添加其他需要安装的软件包
+  brew install zsh tealdeer vim tmux curl wget openssl eza \
+    pygments antigen direnv zip
   log "Package installation completed."
 }
 
-# 定义函数用于配置git全局用户名和邮箱
-config_git() {
-  # 检查是否已经存在现有的gitconfig配置，如果有的话则输出warning信息
-  if [ -f ~/.gitconfig ]; then
-    log "Warning: Existing gitconfig file found. Skipping git global configuration."
+# ~/.gitconfig 由 yadm 跟踪，clone 之后文件已经存在，交互式 git config 不会生效。
+
+decrypt_files() {
+  if [ ! -t 0 ]; then
+    log "Non-interactive session; skipping yadm decrypt."
     return
   fi
-  read -rp "Do you want to configure git global username and email? [y/N]: " answer
-  case $answer in
-  [yY])
-    read -rp "Enter your git username: " username
-    read -rp "Enter your git email: " email
-    git config --global user.name "$username"
-    git config --global user.email "$email"
-    log "Git global configuration completed."
-    ;;
-  *)
-    log "Skipping git global configuration."
-    ;;
-  esac
-}
 
-# 定义函数用于解密加密文件
-decrypt_files() {
-  read -rp "Do you want to decrypt encrypted files using yadm? [y/N]: " answer
+  local answer=""
+  read -rp "Do you want to decrypt encrypted files using yadm? [y/N]: " answer || true
   case $answer in
   [yY])
-    yadm decrypt # 这里可以添加其他需要解密的文件路径
+    yadm decrypt
     log "File decryption completed."
     ;;
   *)
@@ -100,48 +141,55 @@ decrypt_files() {
   esac
 }
 
+change_login_shell() {
+  local zsh_path current_shell
+  zsh_path=$(command -v zsh || true)
+  if [ -z "$zsh_path" ]; then
+    error "zsh is not installed; login shell was not changed."
+    return
+  fi
 
+  current_shell=$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)
+  if [ -z "$current_shell" ] && command -v dscl >/dev/null 2>&1; then
+    current_shell=$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}' || true)
+  fi
 
-# 检查当前操作系统类型以及对应的包管理器，使用正确的包管理器进行软件安装
+  if [ "$current_shell" = "$zsh_path" ]; then
+    log "Zsh is already the login shell ($zsh_path)."
+    return
+  fi
+  if ! grep -qxF "$zsh_path" /etc/shells; then
+    error "$zsh_path is not listed in /etc/shells. Login shell was not changed."
+    return
+  fi
+  if [ ! -t 0 ]; then
+    error "chsh needs a terminal. Run: chsh -s $zsh_path"
+    return
+  fi
+  if chsh -s "$zsh_path"; then
+    log "Login shell set to $zsh_path. Open a new login session to use it."
+  else
+    error "Failed to change the login shell."
+  fi
+}
+
 if [ "$(uname)" = "Darwin" ]; then
-  # 检查是否已经安装homebrew
-  if ! command -v brew &>/dev/null; then
+  if ! command -v brew >/dev/null 2>&1; then
     error "Homebrew is not installed. Please install it first."
     exit 1
   fi
   install_packages_homebrew
-elif [ -f /etc/apt/sources.list ]; then
-  # 询问是否要替换镜像源
+elif command -v apt-get >/dev/null 2>&1; then
   replace_mirror_apt
-  # 添加 eza 官方仓库后再安装
-  add_eza_repo_apt
-  # 安装apt软件
+  sudo DEBIAN_FRONTEND=noninteractive apt-get update
+  ensure_eza_repo_apt
   install_packages_apt
 else
-  # 如果不是apt，则输出错误信息
-  error "Unsupported package manager, please install manually."
+  error "Unsupported package manager. Install the packages manually."
+  exit 1
 fi
 
-# 配置git全局用户名和邮箱
-config_git
-
-# 解密加密文件
 decrypt_files
+change_login_shell
 
 log "Bootstrap script completed."
-
-# 更改默认shell为zsh
-if [ "$SHELL" = "/bin/zsh" ]; then
-  log "Zsh is already the default shell."
-else
-  log "Changing the shell to zsh."
-  if chsh -s "$(which zsh)"; then
-    # 输出绿色信息表示成功更改默认shell
-    log "Default shell changed to zsh."
-    # 重新启动shell以使更改生效
-    exec -l $SHELL
-  else
-    # 输出红色信息表示更改默认shell失败
-    error "Failed to change default shell. Please try again later."
-  fi
-fi
