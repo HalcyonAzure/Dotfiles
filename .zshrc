@@ -1,3 +1,15 @@
+# Per-machine settings (theme, aliases, PATH). This file is gitignored.
+[[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
+
+# Antigen 把主题写进 ~/.antigen/init.zsh。缓存还在时，antigen theme 不会再执行。
+# 本机主题和缓存不一致时删掉缓存，下次启动按 ANTIGEN_THEME 重新生成。
+antigen_theme=${ANTIGEN_THEME:-random}
+antigen_cache=${ADOTDIR:-$HOME/.antigen}/init.zsh
+if [[ -f $antigen_cache ]] && ! grep -F -q "themes/${antigen_theme}.zsh-theme" "$antigen_cache"; then
+  rm -f "$antigen_cache"
+fi
+unset antigen_theme antigen_cache
+
 # Ubuntu package zsh-antigen.
 antigen_zsh=/usr/share/zsh-antigen/antigen.zsh
 if [[ ! -r $antigen_zsh ]]; then
@@ -6,7 +18,8 @@ else
   source "$antigen_zsh"
 
   # Oh My Zsh 在 antigen apply 时读取这个变量，写在 apply 之后不会生效。
-  COMPLETION_WAITING_DOTS="true"
+  # ~/.zshrc.local 可以提前把它设成别的值。
+  : ${COMPLETION_WAITING_DOTS:=true}
 
   antigen use oh-my-zsh
 
@@ -30,7 +43,7 @@ else
   # https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/INSTALL.md#with-a-plugin-manager
   antigen bundle zsh-users/zsh-syntax-highlighting
 
-  antigen theme random
+  antigen theme "${ANTIGEN_THEME:-random}"
   antigen apply
 
   bindkey '^[[A' history-substring-search-up
@@ -60,6 +73,9 @@ ZSH_COLORIZE_STYLE="native"
 # 不要把 cat/less 换成 ccat/cless：colorize 会改写字节，管道和 transfer 会拿到高亮后的内容。
 alias j=z
 alias ls="eza -lh --icons"
+
+# 再读一次本机文件，让这里的别名和 PATH 覆盖上面的默认值。
+[[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
 
 # enable wildmatch
 setopt nonomatch
