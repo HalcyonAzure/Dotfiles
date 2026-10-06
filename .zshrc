@@ -1,24 +1,7 @@
-# Debian/Ubuntu: /usr/share/zsh-antigen/antigen.zsh
-# Homebrew: $(brew --prefix)/share/antigen/antigen.zsh
-antigen_zsh=""
-antigen_candidates=(
-  /usr/share/zsh-antigen/antigen.zsh
-  /opt/homebrew/share/antigen/antigen.zsh
-  /usr/local/share/antigen/antigen.zsh
-)
-if [[ -n ${HOMEBREW_PREFIX:-} ]]; then
-  antigen_candidates=("${HOMEBREW_PREFIX}/share/antigen/antigen.zsh" "${antigen_candidates[@]}")
-fi
-for candidate in "${antigen_candidates[@]}"; do
-  if [[ -r $candidate ]]; then
-    antigen_zsh=$candidate
-    break
-  fi
-done
-unset candidate antigen_candidates
-
-if [[ -z $antigen_zsh ]]; then
-  print -u2 -- "antigen.zsh not found. Install zsh-antigen (apt) or antigen (Homebrew)."
+# Ubuntu package zsh-antigen.
+antigen_zsh=/usr/share/zsh-antigen/antigen.zsh
+if [[ ! -r $antigen_zsh ]]; then
+  print -u2 -- "antigen.zsh not found. Install the zsh-antigen package."
 else
   source "$antigen_zsh"
 

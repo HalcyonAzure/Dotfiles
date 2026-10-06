@@ -9,18 +9,37 @@ error() {
   echo -e "\033[31m[ERROR]\033[0m $1" >&2
 }
 
+require_ubuntu_24() {
+  if [ ! -r /etc/os-release ]; then
+    error "Ubuntu 24.04 or newer is required."
+    exit 1
+  fi
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  local version_major="${VERSION_ID%%.*}"
+  if [ "${ID:-}" != "ubuntu" ] || [ "${version_major:-0}" -lt 24 ]; then
+    error "Ubuntu 24.04 or newer is required (found ${PRETTY_NAME:-unknown})."
+    exit 1
+  fi
+}
+
 if ! sudo -v; then
   error "This script needs sudo. Run it in a terminal so the password prompt is visible."
   exit 1
 fi
 
-# Ubuntu 24.04+ 与 Debian 12+ 使用 deb822（*.sources）。
-# 只改遗留的 sources.list 在这些系统上不会生效。
+require_ubuntu_24
+
+# Ubuntu 24.04+ 的系统源是 deb822：/etc/apt/sources.list.d/ubuntu.sources
 replace_mirror_apt() {
-  local answer=""
+  local answer="" sources="/etc/apt/sources.list.d/ubuntu.sources"
   if [ ! -t 0 ]; then
     log "Non-interactive session; keeping the current APT mirror."
     return
+  fi
+  if [ ! -f "$sources" ]; then
+    error "Missing $sources."
+    exit 1
   fi
 
   read -rp "Use USTC mirror for APT? [y/N]: " answer || true
@@ -32,63 +51,17 @@ replace_mirror_apt() {
     ;;
   esac
 
-  local changed=0
-  local f
-  for f in /etc/apt/sources.list.d/ubuntu.sources \
-    /etc/apt/sources.list.d/debian.sources \
-    /etc/apt/sources.list; do
-    [ -f "$f" ] || continue
-    if grep -qE 'https?://[^[:space:]]+/ubuntu' "$f"; then
-      sudo sed -i -E 's#https?://[^[:space:]]+/ubuntu#https://mirrors.ustc.edu.cn/ubuntu#g' "$f"
-      changed=1
-      log "Updated Ubuntu mirror in $f"
-    fi
-    if grep -qE 'https?://[^[:space:]]+/debian' "$f"; then
-      sudo sed -i -E \
-        -e 's#https?://[^[:space:]]+/debian-security#https://mirrors.ustc.edu.cn/debian-security#g' \
-        -e 's#https?://[^[:space:]]+/debian#https://mirrors.ustc.edu.cn/debian#g' \
-        "$f"
-      changed=1
-      log "Updated Debian mirror in $f"
-    fi
-  done
-
-  if [ "$changed" -eq 0 ]; then
-    log "No APT archive URI matched; mirror files were left unchanged."
-  fi
-}
-
-# Ubuntu 24.04+ / Debian 13+ 的官方仓库已有 eza。
-# 只有缓存里没有候选包时才添加 deb.gierens.de（例如 Ubuntu 22.04、Debian 12）。
-ensure_eza_repo_apt() {
-  if apt-cache show eza 2>/dev/null | grep -q '^Package: eza$'; then
-    log "eza is available from the configured repositories."
+  if ! grep -qE 'https?://[^[:space:]]+/ubuntu' "$sources"; then
+    log "No Ubuntu archive URI matched; $sources was left unchanged."
     return
   fi
-
-  log "eza is not in the distro repositories; adding deb.gierens.de..."
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg
-  sudo mkdir -p /etc/apt/keyrings
-
-  local tmp keyring
-  tmp=$(mktemp)
-  keyring=/etc/apt/keyrings/gierens.gpg
-  curl -fsSL https://raw.githubusercontent.com/eza-community/eza/main/deb.asc -o "$tmp"
-  # --batch --yes 避免目标文件已存在时 gpg 去读 /dev/tty。
-  sudo gpg --batch --yes --dearmor -o "$keyring" "$tmp"
-  rm -f "$tmp"
-
-  echo "deb [signed-by=${keyring}] http://deb.gierens.de stable main" |
-    sudo tee /etc/apt/sources.list.d/gierens.list >/dev/null
-  sudo chmod 644 "$keyring" /etc/apt/sources.list.d/gierens.list
-  sudo DEBIAN_FRONTEND=noninteractive apt-get update
-  log "eza repository added."
+  sudo sed -i -E 's#https?://[^[:space:]]+/ubuntu#https://mirrors.ustc.edu.cn/ubuntu#g' "$sources"
+  log "Updated Ubuntu mirror in $sources"
 }
 
 install_packages_apt() {
-  # tealdeer 提供 /usr/bin/tldr。旧包 tldr 在 Ubuntu 25.10 起已删除，和别的包写在同一条 install 里会导致整单失败。
-  # 不安装 python3-pip：PEP 668 下不能往系统 Python 里 pip install。python3-venv 用来建虚拟环境。
-  # python3-pygments 提供 pygmentize，给 oh-my-zsh colorize 使用。
+  # tealdeer 提供 /usr/bin/tldr。24.04 起用它，不再安装已废弃的 tldr 包。
+  # 不安装 python3-pip：PEP 668 下不能往系统 Python 里 pip install。
   local packages=(
     zsh
     tealdeer
@@ -111,16 +84,6 @@ install_packages_apt() {
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
   log "Package installation completed."
 }
-
-install_packages_homebrew() {
-  # Homebrew 上的 openssl 是 keg-only，不会替换系统里 yadm 调用的 openssl。
-  log "Installing common components..."
-  brew install zsh tealdeer vim tmux curl wget openssl eza \
-    pygments antigen direnv zip
-  log "Package installation completed."
-}
-
-# ~/.gitconfig 由 yadm 跟踪，clone 之后文件已经存在，交互式 git config 不会生效。
 
 decrypt_files() {
   if [ ! -t 0 ]; then
@@ -149,11 +112,7 @@ change_login_shell() {
     return
   fi
 
-  current_shell=$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)
-  if [ -z "$current_shell" ] && command -v dscl >/dev/null 2>&1; then
-    current_shell=$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}' || true)
-  fi
-
+  current_shell=$(getent passwd "$USER" | cut -d: -f7)
   if [ "$current_shell" = "$zsh_path" ]; then
     log "Zsh is already the login shell ($zsh_path)."
     return
@@ -173,22 +132,9 @@ change_login_shell() {
   fi
 }
 
-if [ "$(uname)" = "Darwin" ]; then
-  if ! command -v brew >/dev/null 2>&1; then
-    error "Homebrew is not installed. Please install it first."
-    exit 1
-  fi
-  install_packages_homebrew
-elif command -v apt-get >/dev/null 2>&1; then
-  replace_mirror_apt
-  sudo DEBIAN_FRONTEND=noninteractive apt-get update
-  ensure_eza_repo_apt
-  install_packages_apt
-else
-  error "Unsupported package manager. Install the packages manually."
-  exit 1
-fi
-
+replace_mirror_apt
+sudo DEBIAN_FRONTEND=noninteractive apt-get update
+install_packages_apt
 decrypt_files
 change_login_shell
 
